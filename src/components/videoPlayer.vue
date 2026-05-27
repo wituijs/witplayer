@@ -7,6 +7,7 @@
     @mouseleave="handleMouseLeave"
     @touchstart="handleTouchStart"
     @touchend="handleTouchEnd"
+    @contextmenu.prevent="handleContextMenu"
   >
     <video
       ref="videoRef"
@@ -57,11 +58,16 @@
       v-if="showBigPlay"
       class="wit-big-play" 
       aria-label="播放"
-      @click="togglePlay"
+      @click.stop="togglePlay"
+      @touchstart.stop
+      @touchend.stop
     >
-      <svg viewBox="0 0 24 24">
-        <path v-if="isEnded" d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/>
-        <path v-else d="M8 5v14l11-7z"/>
+      <svg v-if="isEnded" xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" viewBox="0 0 18 18">
+        <path d="M9 1a7.98 7.98 0 0 0-6.132 2.867l-1.441-1.44A.25.25 0 0 0 1 2.604V6.75c0 .138.112.25.25.25h4.146a.25.25 0 0 0 .177-.427L4.29 5.29A5.99 5.99 0 0 1 9 3a6 6 0 1 1-6 6H1a8 8 0 1 0 8-8"></path>
+        <path d="m11.61 9.639-3.331 2.07a.826.826 0 0 1-1.15-.266.86.86 0 0 1-.129-.452V6.849C7 6.38 7.374 6 7.834 6c.158 0 .312.045.445.13l3.331 2.071a.858.858 0 0 1 0 1.438"></path>
+      </svg>
+      <svg v-else xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" viewBox="0 0 18 18">
+        <path d="m14.051 10.723-7.985 4.964a1.98 1.98 0 0 1-2.758-.638A2.06 2.06 0 0 1 3 13.964V4.036C3 2.91 3.895 2 5 2c.377 0 .747.109 1.066.313l7.985 4.964a2.057 2.057 0 0 1 .627 2.808c-.16.257-.373.475-.627.637"></path>
       </svg>
     </button>
 
@@ -201,6 +207,12 @@
             </svg>
           </button>
 
+          <button v-if="props.danmaku" class="wit-btn" aria-label="弹幕" @click="toggleDanmaku">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" viewBox="0 0 18 18">
+              <path d="M3 3h12a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2m0 2v8h12V5zm2 2h3v2H5zm0 3h5v2H5zm6-3h2v2h-2z"/>
+            </svg>
+          </button>
+
           <button class="wit-btn" aria-label="全屏" @click="toggleFullscreen">
             <svg v-if="!isFullscreen" xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" viewBox="0 0 18 18">
               <path d="M9.57 3.617A1 1 0 0 0 8.646 3H4c-.552 0-1 .449-1 1v4.646a.996.996 0 0 0 1.001 1 1 1 0 0 0 .706-.293l4.647-4.647a1 1 0 0 0 .216-1.089m4.812 4.812a1 1 0 0 0-1.089.217l-4.647 4.647a.998.998 0 0 0 .708 1.706H14c.552 0 1-.449 1-1V9.353a1 1 0 0 0-.618-.924"></path>
@@ -223,6 +235,30 @@
 
     <div class="wit-toast" :class="{ 'wit-show': toastVisible }">
       {{ toastMessage }}
+    </div>
+
+    <div v-if="contextMenuVisible" class="wit-context-menu" :style="contextMenuStyle">
+      <div class="wit-context-menu-item" @click="copyVideoUrl">复制视频地址</div>
+      <div class="wit-context-menu-item" @click="showVersion">版本信息</div>
+    </div>
+
+    <div v-if="danmakuEnabled" class="wit-danmaku-container" ref="danmakuContainer">
+      <div 
+        v-for="item in visibleDanmakus" 
+        :key="item.id"
+        class="wit-danmaku-item"
+        :style="item.style"
+      >{{ item.text }}</div>
+    </div>
+
+    <div v-if="danmakuInputVisible" class="wit-danmaku-input">
+      <input 
+        v-model="danmakuText" 
+        placeholder="发送弹幕..."
+        @keyup.enter="sendDanmaku"
+        @blur="closeDanmakuInput"
+        ref="danmakuInputRef"
+      />
     </div>
   </div>
 </template>
@@ -275,6 +311,18 @@ const props = defineProps({
   isM3u8: {
     type: Boolean,
     default: false
+  },
+  codec: {
+    type: String,
+    default: ''
+  },
+  danmaku: {
+    type: Boolean,
+    default: false
+  },
+  danmakuList: {
+    type: Array,
+    default: () => []
   }
 })
 
@@ -304,12 +352,24 @@ const currentVolume = ref(props.volume)
 const playbackRate = ref(1)
 const errorMessage = ref('视频加载失败')
 
-const controlsVisible = ref(true)
+const controlsVisible = ref(false)
 const hideControlsTimeout = ref(null)
 const touchStartTime = ref(0)
 
 const toastVisible = ref(false)
 const toastMessage = ref('')
+
+const contextMenuVisible = ref(false)
+const contextMenuStyle = ref({})
+
+const danmakuEnabled = ref(props.danmaku)
+const danmakuInputVisible = ref(false)
+const danmakuText = ref('')
+const danmakuInputRef = ref(null)
+const danmakuContainer = ref(null)
+const visibleDanmakus = ref([])
+const danmakuId = ref(0)
+const danmakuQueue = ref([])
 
 const tooltipVisible = ref(false)
 const tooltipPercent = ref(0)
@@ -324,7 +384,8 @@ const progressPercent = computed(() => {
 })
 
 const videoType = computed(() => {
-  if (props.src.includes('.mp4')) return 'video/mp4'
+  if (props.codec) return props.codec
+  if (props.src.includes('.mp4')) return 'video/mp4; codecs="hvc1"'
   if (props.src.includes('.webm')) return 'video/webm'
   if (props.src.includes('.ogg')) return 'video/ogg'
   return 'video/mp4'
@@ -346,7 +407,8 @@ const showBigPlay = computed(() => {
 
 const controlsStyle = computed(() => ({
   opacity: controlsVisible.value ? 1 : 0,
-  visibility: controlsVisible.value ? 'visible' : 'hidden'
+  visibility: controlsVisible.value ? 'visible' : 'hidden',
+  transform: controlsVisible.value ? 'translateY(0)' : 'translateY(100%)'
 }))
 
 const formatTime = (seconds) => {
@@ -366,6 +428,105 @@ const showToast = (message) => {
   setTimeout(() => {
     toastVisible.value = false
   }, 1500)
+}
+
+const handleContextMenu = (e) => {
+  contextMenuVisible.value = true
+  contextMenuStyle.value = {
+    left: `${e.clientX}px`,
+    top: `${e.clientY}px`
+  }
+}
+
+const hideContextMenu = () => {
+  contextMenuVisible.value = false
+}
+
+const copyVideoUrl = () => {
+  if (props.src) {
+    navigator.clipboard.writeText(props.src).then(() => {
+      showToast('视频地址已复制')
+    }).catch(() => {
+      showToast('复制失败')
+    })
+  }
+  hideContextMenu()
+}
+
+const showVersion = () => {
+  showToast('witplayer v1.0.0')
+  hideContextMenu()
+}
+
+const toggleDanmaku = () => {
+  danmakuEnabled.value = !danmakuEnabled.value
+  showToast(danmakuEnabled.value ? '弹幕已开启' : '弹幕已关闭')
+}
+
+const openDanmakuInput = () => {
+  danmakuInputVisible.value = true
+  nextTick(() => {
+    danmakuInputRef.value?.focus()
+  })
+}
+
+const closeDanmakuInput = () => {
+  danmakuInputVisible.value = false
+  danmakuText.value = ''
+}
+
+const sendDanmaku = () => {
+  if (!danmakuText.value.trim()) {
+    closeDanmakuInput()
+    return
+  }
+  
+  const colors = ['#fff', '#ff5f56', '#ffbd2e', '#27c93f', '#007aff', '#ff2d55', '#af52de', '#ff9500']
+  const color = colors[Math.floor(Math.random() * colors.length)]
+  
+  addDanmaku({
+    text: danmakuText.value,
+    color: color
+  })
+  
+  closeDanmakuInput()
+}
+
+const addDanmaku = (item) => {
+  const container = danmakuContainer.value
+  if (!container) return
+  
+  const id = danmakuId.value++
+  const top = Math.random() * (container.offsetHeight - 30)
+  
+  const danmakuItem = {
+    id,
+    text: item.text,
+    style: {
+      top: `${top}px`,
+      color: item.color || '#fff',
+      transform: 'translateX(100%)'
+    }
+  }
+  
+  visibleDanmakus.value.push(danmakuItem)
+  
+  setTimeout(() => {
+    visibleDanmakus.value = visibleDanmakus.value.filter(d => d.id !== id)
+  }, 8000)
+}
+
+const processDanmakuQueue = () => {
+  if (!videoRef.value || !danmakuEnabled.value) return
+  
+  const currentTime = videoRef.value.currentTime
+  
+  props.danmakuList.forEach(item => {
+    if (Math.abs(item.time - currentTime) < 0.5 && !danmakuQueue.value.includes(item.id)) {
+      danmakuQueue.value.push(item.id)
+      addDanmaku(item)
+    }
+  })
 }
 
 const initHls = () => {
@@ -617,21 +778,20 @@ const showControls = () => {
   controlsVisible.value = true
   clearTimeout(hideControlsTimeout.value)
   
-  if (isPlaying.value) {
-    hideControlsTimeout.value = setTimeout(() => {
-      controlsVisible.value = false
-    }, 3000)
-  }
+  hideControlsTimeout.value = setTimeout(() => {
+    controlsVisible.value = false
+  }, 3000)
 }
 
 const handleMouseMove = () => {
+  if ('ontouchstart' in window) return
   showControls()
 }
 
 const handleMouseLeave = () => {
-  if (isPlaying.value) {
-    controlsVisible.value = false
-  }
+  if ('ontouchstart' in window) return
+  clearTimeout(hideControlsTimeout.value)
+  controlsVisible.value = false
 }
 
 const handleTouchStart = () => {
@@ -642,8 +802,9 @@ const handleTouchEnd = () => {
   const touchDuration = Date.now() - touchStartTime.value
   if (touchDuration < 200) {
     if (controlsVisible.value) {
+      clearTimeout(hideControlsTimeout.value)
       controlsVisible.value = false
-    } else {
+    } else if (isPlaying.value) {
       showControls()
     }
   }
@@ -706,11 +867,20 @@ const onPlay = () => {
   isEnded.value = false
   isLoading.value = false
   emit('play')
+  
+  if ('ontouchstart' in window) {
+    showControls()
+  }
 }
 
 const onPause = () => {
   isPlaying.value = false
   emit('pause')
+  
+  if ('ontouchstart' in window) {
+    clearTimeout(hideControlsTimeout.value)
+    controlsVisible.value = false
+  }
 }
 
 const onEnded = () => {
@@ -723,6 +893,7 @@ const onTimeUpdate = () => {
   if (!videoRef.value || isDragging.value) return
   currentTime.value = videoRef.value.currentTime
   emit('timeupdate', currentTime.value)
+  processDanmakuQueue()
 }
 
 const onProgress = () => {
@@ -786,6 +957,7 @@ onMounted(async () => {
   document.addEventListener('webkitfullscreenchange', onFullscreenChange)
   document.addEventListener('keydown', handleKeyDown)
   document.addEventListener('click', handleDocumentClick)
+  document.addEventListener('click', hideContextMenu)
   
   videoRef.value.volume = currentVolume.value
   if (props.muted) {
@@ -1070,13 +1242,9 @@ defineExpose({
   padding: 0 12px 12px;
   z-index: 20;
   opacity: 0;
-  transition: opacity var(--wit-transition);
-}
-
-.wit-container:hover .wit-controls,
-.wit-container.wit-paused .wit-controls,
-.wit-container.wit-touch .wit-controls {
-  opacity: 1;
+  visibility: hidden;
+  transform: translateY(100%);
+  transition: opacity 0.5s ease, visibility 0.5s ease, transform 0.5s ease;
 }
 
 .wit-progress-wrap {
@@ -1573,6 +1741,91 @@ defineExpose({
   opacity: 1;
 }
 
+.wit-context-menu {
+  position: fixed;
+  z-index: 9999;
+  background: rgba(20, 20, 30, 0.95);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  padding: 6px 0;
+  min-width: 150px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+
+.wit-context-menu-item {
+  padding: 10px 16px;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.85);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.wit-context-menu-item:hover {
+  background: rgba(99, 102, 241, 0.2);
+  color: #fff;
+}
+
+.wit-danmaku-container {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 60px;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.wit-danmaku-item {
+  position: absolute;
+  white-space: nowrap;
+  font-size: 18px;
+  font-weight: 500;
+  text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.8), -1px -1px 2px rgba(0, 0, 0, 0.8);
+  animation: danmaku-move 8s linear forwards;
+  pointer-events: none;
+}
+
+@keyframes danmaku-move {
+  from {
+    transform: translateX(100%);
+    left: 100%;
+  }
+  to {
+    transform: translateX(-100%);
+    left: 0;
+  }
+}
+
+.wit-danmaku-input {
+  position: absolute;
+  bottom: 70px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 20;
+}
+
+.wit-danmaku-input input {
+  width: 300px;
+  padding: 10px 16px;
+  background: rgba(0, 0, 0, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  color: #fff;
+  font-size: 14px;
+  outline: none;
+}
+
+.wit-danmaku-input input::placeholder {
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.wit-danmaku-input input:focus {
+  border-color: rgba(99, 102, 241, 0.5);
+}
+
 @media (max-width: 768px) {
   .wit-controls {
     padding: 0 8px 8px;
@@ -1589,7 +1842,7 @@ defineExpose({
     flex: none;
     order: 1;
     width: 100%;
-    padding: 0 0 4px;
+    padding: 0 4px;
     margin-bottom: 0;
   }
   
@@ -1652,9 +1905,6 @@ defineExpose({
 }
 
 @media (max-width: 480px) {
-  .wit-progress-wrap {
-    margin-bottom: 6px;
-  }
   
   .wit-controls-bar {
     padding: 4px 5px;
@@ -1695,10 +1945,6 @@ defineExpose({
 }
 
 @media (hover: none) {
-  .wit-controls {
-    opacity: 1;
-  }
-  
   .wit-progress-thumb {
     opacity: 1;
     width: 16px;

@@ -1,6 +1,6 @@
 {
-  "name": "wit-player",
-  "version": "1.0.0",
+  "name": "witplayer",
+  "version": "1.2.11",
   "type": "module",
   "scripts": {
     "dev": "vite",

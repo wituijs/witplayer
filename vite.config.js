@@ -1,29 +1,15 @@
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import { resolve } from 'path'
-import { copyFileSync, mkdirSync, existsSync, readFileSync, writeFileSync, unlinkSync } from 'fs'
-
-const copyIndexPlugin = () => ({
-  name: 'copy-index',
-  closeBundle() {
-    const distDir = resolve(__dirname, 'dist')
-    if (!existsSync(distDir)) {
-      mkdirSync(distDir, { recursive: true })
-    }
-    copyFileSync(
-      resolve(__dirname, 'public/index.html'),
-      resolve(distDir, 'index.html')
-    )
-  }
-})
+import { readFileSync, writeFileSync, unlinkSync, existsSync } from 'fs'
 
 const inlineCssPlugin = () => ({
   name: 'inline-css',
   enforce: 'post',
   closeBundle() {
     const distDir = resolve(__dirname, 'dist')
-    const cssFile = resolve(distDir, 'wit-player.css')
-    const jsFile = resolve(distDir, 'wit-player.js')
+    const cssFile = resolve(distDir, 'witplayer.css')
+    const jsFile = resolve(distDir, 'witplayer.js')
     
     if (existsSync(cssFile) && existsSync(jsFile)) {
       const css = readFileSync(cssFile, 'utf-8')
@@ -39,59 +25,70 @@ const inlineCssPlugin = () => ({
   }
 })
 
-const fixUmdExportPlugin = () => ({
-  name: 'fix-umd-export',
+const transformHtmlPlugin = () => ({
+  name: 'transform-html',
   enforce: 'post',
   closeBundle() {
     const distDir = resolve(__dirname, 'dist')
-    const jsFile = resolve(distDir, 'wit-player.js')
+    const htmlFile = resolve(distDir, 'index.html')
     
-    if (existsSync(jsFile)) {
-      let js = readFileSync(jsFile, 'utf-8')
+    if (existsSync(htmlFile)) {
+      let html = readFileSync(htmlFile, 'utf-8')
       
-      js = js.replace(
-        /t\.default=\w+,t\.witPlayer=\w+,Object\.defineProperties\(t,\{__esModule:\{value:!0\},\[Symbol\.toStringTag\]:\{value:"Module"\}\}\)/g,
-        't.default=void 0,t.witPlayer=void 0,Object.defineProperties(t,{__esModule:{value:!1}})'
+      html = html.replace(
+        /<script type="module" src="\/src\/dev\.js"><\/script>/g,
+        '<script src="./witplayer.js"></script>'
       )
       
-      writeFileSync(jsFile, js)
+      writeFileSync(htmlFile, html)
     }
   }
 })
 
-export default defineConfig({
-  plugins: [vue(), copyIndexPlugin(), inlineCssPlugin(), fixUmdExportPlugin()],
-  define: {
-    'process.env.NODE_ENV': JSON.stringify('production')
-  },
-  build: {
-    lib: {
-      entry: resolve(__dirname, 'src/main.js'),
-      name: 'witPlayer',
-      fileName: () => 'wit-player.js',
-      formats: ['umd']
-    },
-    minify: 'terser',
-    terserOptions: {
-      compress: {
-        drop_console: true,
-        drop_debugger: true,
-        pure_funcs: ['console.log']
-      },
-      mangle: {
-        toplevel: true,
-        safari10: true
-      },
-      format: {
-        comments: false
+export default defineConfig(({ command }) => {
+  if (command === 'serve') {
+    return {
+      plugins: [vue()],
+      define: {
+        'process.env.NODE_ENV': JSON.stringify('development')
       }
+    }
+  }
+  
+  return {
+    plugins: [vue(), inlineCssPlugin(), transformHtmlPlugin()],
+    define: {
+      'process.env.NODE_ENV': JSON.stringify('production')
     },
-    rollupOptions: {
-      output: {
-        globals: {},
-        exports: 'default',
-        compact: true,
-        assetFileNames: 'wit-player.[ext]'
+    build: {
+      lib: {
+        entry: resolve(__dirname, 'src/main.js'),
+        name: 'witplayer',
+        fileName: () => 'witplayer.js',
+        formats: ['umd']
+      },
+      minify: 'terser',
+      terserOptions: {
+        compress: {
+          drop_console: true,
+          drop_debugger: true,
+          pure_funcs: ['console.log']
+        },
+        mangle: {
+          toplevel: true,
+          safari10: true
+        },
+        format: {
+          comments: false
+        }
+      },
+      rollupOptions: {
+        output: {
+          globals: {},
+          exports: 'default',
+          compact: true,
+          assetFileNames: 'witplayer.[ext]'
+        }
       }
     }
   }
