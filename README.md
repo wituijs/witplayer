@@ -24,7 +24,6 @@ npm install witplayer
 
 ```js
 import witplayer from 'witplayer';
-import 'witplayer/dist/witplayer.css';
 
 const player = new witplayer({
   container: '#player',
@@ -39,7 +38,6 @@ const player = new witplayer({
 <!DOCTYPE html>
 <html>
 <head>
-  <link rel="stylesheet" href="https://unpkg.com/witplayer/dist/witplayer.css">
 </head>
 <body>
   <div id="player" style="width: 800px; height: 450px;"></div>
@@ -90,20 +88,47 @@ player.destroy();           // 销毁播放器
 
 ## 弹幕功能
 
+### 基本配置
+
 ```js
 const player = new witplayer({
   container: '#player',
   src: 'video.m3u8',
   isM3u8: true,
-  danmaku: true,
+  danmaku: true,  // 开启弹幕功能，会显示弹幕按钮和弹幕显示区域
   danmakuList: [
     { id: 1, time: 1, text: '弹幕内容', color: '#fff' },
     { id: 2, time: 5, text: '另一条弹幕', color: '#ff5f56' }
   ]
 });
+```
 
+### 弹幕按钮说明
+
+- 当设置 `danmaku: true` 时，播放器控制栏会显示弹幕按钮
+- 弹幕按钮有两种状态：
+  - **开启状态**：显示正常弹幕图标
+  - **关闭状态**：显示半透明弹幕图标并带斜线
+- 点击弹幕按钮可以切换弹幕的显示/隐藏
+
+### 发送实时弹幕
+
+```js
 // 发送实时弹幕
 player.sendDanmaku('实时弹幕', '#007aff');
+```
+
+### 关闭弹幕功能
+
+如果不希望显示弹幕按钮和弹幕功能，只需不设置 `danmaku` 参数或设置为 `false`：
+
+```js
+const player = new witplayer({
+  container: '#player',
+  src: 'video.m3u8',
+  isM3u8: true,
+  danmaku: false  // 不显示弹幕按钮和弹幕功能
+});
 ```
 
 ## H.265 支持

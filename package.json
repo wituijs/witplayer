@@ -2,14 +2,13 @@
   "name": "witplayer",
   "version": "1.2.11",
   "type": "module",
-  "main": "./dist/witplayer.umd.cjs",
+  "main": "./dist/witplayer.js",
   "module": "./dist/witplayer.js",
   "exports": {
     ".": {
       "import": "./dist/witplayer.js",
-      "require": "./dist/witplayer.umd.cjs"
-    },
-    "./dist/witplayer.css": "./dist/witplayer.css"
+      "require": "./dist/witplayer.js"
+    }
   },
   "files": [
     "dist"

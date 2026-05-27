@@ -1,54 +1,119 @@
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import { resolve } from 'path'
-import { readFileSync, writeFileSync, unlinkSync, existsSync } from 'fs'
+import { readFileSync, writeFileSync, existsSync } from 'fs'
 
 const inlineCssPlugin = () => ({
   name: 'inline-css',
   enforce: 'post',
-  closeBundle() {
-    const distDir = resolve(__dirname, 'dist')
-    const cssFile = resolve(distDir, 'witplayer.css')
-    const jsFile = resolve(distDir, 'witplayer.js')
-    const umdFile = resolve(distDir, 'witplayer.umd.cjs')
+  generateBundle(options, bundle) {
+    let cssContent = ''
     
-    if (existsSync(cssFile)) {
-      const css = readFileSync(cssFile, 'utf-8')
-      const styleInjection = `(function(){var s=document.createElement('style');s.textContent=${JSON.stringify(css)};document.head.appendChild(s)})();`
-      
-      if (existsSync(jsFile)) {
-        let js = readFileSync(jsFile, 'utf-8')
-        js = styleInjection + js
-        writeFileSync(jsFile, js)
+    for (const fileName in bundle) {
+      if (fileName.endsWith('.css')) {
+        cssContent += bundle[fileName].source
+        delete bundle[fileName]
       }
+    }
+    
+    if (cssContent) {
+      const styleInjection = `const style=document.createElement('style');style.textContent=${JSON.stringify(cssContent)};document.head.appendChild(style);`
       
-      if (existsSync(umdFile)) {
-        let umd = readFileSync(umdFile, 'utf-8')
-        umd = styleInjection + umd
-        writeFileSync(umdFile, umd)
+      for (const fileName in bundle) {
+        if (fileName.endsWith('.js')) {
+          bundle[fileName].code = styleInjection + bundle[fileName].code
+        }
       }
-      
-      unlinkSync(cssFile)
     }
   }
 })
 
-const transformHtmlPlugin = () => ({
-  name: 'transform-html',
+const copyHtmlPlugin = () => ({
+  name: 'copy-html',
   enforce: 'post',
   closeBundle() {
     const distDir = resolve(__dirname, 'dist')
-    const htmlFile = resolve(distDir, 'index.html')
+    const srcHtml = resolve(__dirname, 'index.html')
+    const distHtml = resolve(distDir, 'index.html')
     
-    if (existsSync(htmlFile)) {
-      let html = readFileSync(htmlFile, 'utf-8')
+    if (existsSync(srcHtml)) {
+      let html = readFileSync(srcHtml, 'utf-8')
       
       html = html.replace(
         /<script type="module" src="\/src\/dev\.js"><\/script>/g,
-        '<script src="./witplayer.js"></script>'
+        ''
       )
       
-      writeFileSync(htmlFile, html)
+      html = html.replace(
+        /<\/head>/g,
+        '  <script src="./witplayer.js"></script>\n</head>'
+      )
+      
+      const initScript = `
+  <script>
+    let player = null;
+    const sources = {
+      mp4: {
+        src: 'https://www.w3schools.com/html/mov_bbb.mp4',
+        poster: 'https://www.w3schools.com/html/mov_bbb.mp4#t=0.1'
+      },
+      hls: {
+        src: 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8',
+        isM3u8: true,
+        danmaku: true,
+        danmakuList: [
+          { id: 1, time: 1, text: '测试弹幕1', color: '#fff' },
+          { id: 2, time: 3, text: '这是一条弹幕', color: '#ff5f56' },
+          { id: 3, time: 5, text: 'witplayer 弹幕功能', color: '#27c93f' },
+          { id: 4, time: 8, text: '支持自定义颜色', color: '#007aff' },
+          { id: 5, time: 12, text: '弹幕飘过~', color: '#ff9500' },
+        ]
+      },
+      live: {
+        src: 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8',
+        isM3u8: true,
+        isLive: true,
+        danmaku: true
+      }
+    };
+    
+    function initPlayer(type) {
+      if (player && player.destroy) {
+        player.destroy();
+      }
+      
+      const config = sources[type];
+      player = new witplayer({
+        container: '#player',
+        src: config.src,
+        isM3u8: config.isM3u8,
+        isLive: config.isLive,
+        poster: config.poster,
+        danmaku: config.danmaku,
+        danmakuList: config.danmakuList,
+        autoplay: false,
+        muted: false,
+        volume: 0.8
+      });
+    }
+    
+    document.querySelectorAll('.tab').forEach(btn => {
+      btn.addEventListener('click', function() {
+        document.querySelectorAll('.tab').forEach(b => b.classList.remove('active'));
+        this.classList.add('active');
+        initPlayer(this.dataset.type);
+      });
+    });
+    
+    initPlayer('hls');
+  </script>`
+      
+      html = html.replace(
+        /<\/body>/g,
+        initScript + '\n</body>'
+      )
+      
+      writeFileSync(distHtml, html)
     }
   }
 })
@@ -64,7 +129,7 @@ export default defineConfig(({ command }) => {
   }
   
   return {
-    plugins: [vue(), inlineCssPlugin(), transformHtmlPlugin()],
+    plugins: [vue(), inlineCssPlugin(), copyHtmlPlugin()],
     define: {
       'process.env.NODE_ENV': JSON.stringify('production')
     },
@@ -72,11 +137,8 @@ export default defineConfig(({ command }) => {
       lib: {
         entry: resolve(__dirname, 'src/main.js'),
         name: 'witplayer',
-        fileName: (format) => {
-          if (format === 'umd') return 'witplayer.umd.cjs'
-          return 'witplayer.js'
-        },
-        formats: ['es', 'umd']
+        fileName: (format) => 'witplayer.js',
+        formats: ['iife']
       },
       minify: 'terser',
       terserOptions: {
@@ -86,7 +148,7 @@ export default defineConfig(({ command }) => {
           pure_funcs: ['console.log']
         },
         mangle: {
-          toplevel: true,
+          toplevel: false,
           safari10: true
         },
         format: {
@@ -94,15 +156,8 @@ export default defineConfig(({ command }) => {
         }
       },
       rollupOptions: {
-        external: ['vue', 'hls.js'],
         output: {
-          globals: {
-            vue: 'Vue',
-            'hls.js': 'Hls'
-          },
-          exports: 'default',
-          compact: true,
-          assetFileNames: 'witplayer.[ext]'
+          compact: true
         }
       }
     }

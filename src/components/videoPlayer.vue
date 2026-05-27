@@ -208,8 +208,12 @@
           </button>
 
           <button v-if="props.danmaku" class="wit-btn" aria-label="弹幕" @click="toggleDanmaku">
-            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" viewBox="0 0 18 18">
+            <svg v-if="danmakuEnabled" xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" viewBox="0 0 18 18">
               <path d="M3 3h12a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2m0 2v8h12V5zm2 2h3v2H5zm0 3h5v2H5zm6-3h2v2h-2z"/>
+            </svg>
+            <svg v-else xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" viewBox="0 0 18 18">
+              <path d="M3 3h12a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2m0 2v8h12V5zm2 2h3v2H5zm0 3h5v2H5zm6-3h2v2h-2z" opacity="0.3"/>
+              <path d="M1.5 1.5l15 15" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/>
             </svg>
           </button>
 
