@@ -10,16 +10,24 @@ const inlineCssPlugin = () => ({
     const distDir = resolve(__dirname, 'dist')
     const cssFile = resolve(distDir, 'witplayer.css')
     const jsFile = resolve(distDir, 'witplayer.js')
+    const umdFile = resolve(distDir, 'witplayer.umd.cjs')
     
-    if (existsSync(cssFile) && existsSync(jsFile)) {
+    if (existsSync(cssFile)) {
       const css = readFileSync(cssFile, 'utf-8')
-      let js = readFileSync(jsFile, 'utf-8')
-      
       const styleInjection = `(function(){var s=document.createElement('style');s.textContent=${JSON.stringify(css)};document.head.appendChild(s)})();`
       
-      js = styleInjection + js
+      if (existsSync(jsFile)) {
+        let js = readFileSync(jsFile, 'utf-8')
+        js = styleInjection + js
+        writeFileSync(jsFile, js)
+      }
       
-      writeFileSync(jsFile, js)
+      if (existsSync(umdFile)) {
+        let umd = readFileSync(umdFile, 'utf-8')
+        umd = styleInjection + umd
+        writeFileSync(umdFile, umd)
+      }
+      
       unlinkSync(cssFile)
     }
   }
@@ -64,8 +72,11 @@ export default defineConfig(({ command }) => {
       lib: {
         entry: resolve(__dirname, 'src/main.js'),
         name: 'witplayer',
-        fileName: () => 'witplayer.js',
-        formats: ['umd']
+        fileName: (format) => {
+          if (format === 'umd') return 'witplayer.umd.cjs'
+          return 'witplayer.js'
+        },
+        formats: ['es', 'umd']
       },
       minify: 'terser',
       terserOptions: {
@@ -83,8 +94,12 @@ export default defineConfig(({ command }) => {
         }
       },
       rollupOptions: {
+        external: ['vue', 'hls.js'],
         output: {
-          globals: {},
+          globals: {
+            vue: 'Vue',
+            'hls.js': 'Hls'
+          },
           exports: 'default',
           compact: true,
           assetFileNames: 'witplayer.[ext]'
