@@ -59,8 +59,6 @@
       class="wit-big-play" 
       aria-label="播放"
       @click.stop="togglePlay"
-      @touchstart.stop
-      @touchend.stop
     >
       <svg v-if="isEnded" xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" viewBox="0 0 18 18">
         <path d="M9 1a7.98 7.98 0 0 0-6.132 2.867l-1.441-1.44A.25.25 0 0 0 1 2.604V6.75c0 .138.112.25.25.25h4.146a.25.25 0 0 0 .177-.427L4.29 5.29A5.99 5.99 0 0 1 9 3a6 6 0 1 1-6 6H1a8 8 0 1 0 8-8"></path>
@@ -883,7 +881,9 @@ const handleTouchStart = () => {
 }
 
 // 触摸结束事件处理（移动端）
-const handleTouchEnd = () => {
+const handleTouchEnd = (e) => {
+  if (e.target.closest('.wit-big-play')) return
+  
   const touchDuration = Date.now() - touchStartTime.value
   if (touchDuration < 200) {
     if (controlsVisible.value) {
@@ -1252,14 +1252,16 @@ defineExpose({
   border-radius: 9999px;
   cursor: pointer;
   z-index: 10;
-  display: none;
+  display: flex;
   align-items: center;
   justify-content: center;
   box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(255, 255, 255, 0.08);
-  transition: transform 0.15s ease-out, background 0.15s ease-out;
+  transition: transform 0.15s ease-out, background 0.15s ease-out, opacity 0.15s ease-out;
   outline: 2px solid transparent;
   outline-offset: -2px;
+  opacity: 0;
+  visibility: hidden;
 }
 
 .wit-big-play svg {
@@ -1283,9 +1285,10 @@ defineExpose({
   outline-offset: 2px;
 }
 
-.wit-container.wit-paused:not(.wit-waiting) .wit-big-play,
-.wit-container.wit-ended:not(.wit-waiting) .wit-big-play {
-  display: flex;
+.wit-container.wit-paused .wit-big-play,
+.wit-container.wit-ended .wit-big-play {
+  opacity: 1;
+  visibility: visible;
 }
 
 .wit-container.wit-ended .wit-big-play svg {
@@ -1300,6 +1303,13 @@ defineExpose({
   z-index: 15;
   display: none;
   color: #fff;
+}
+
+.wit-container.wit-waiting.wit-paused .wit-big-play,
+.wit-container.wit-waiting.wit-ended .wit-big-play,
+.wit-container.wit-waiting .wit-big-play {
+  opacity: 0 !important;
+  visibility: hidden !important;
 }
 
 .wit-loading-spinner {
@@ -2096,14 +2106,6 @@ defineExpose({
     outline-color: rgba(255, 255, 255, 0.25);
     outline-offset: 0;
   }
-}
-
-.wit-container.wit-waiting .wit-big-play {
-  display: none !important;
-}
-
-.wit-container.wit-ended .wit-big-play {
-  display: flex;
 }
 
 .wit-container.wit-waiting .wit-poster {
