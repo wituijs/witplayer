@@ -2,6 +2,11 @@ import { createApp, h } from 'vue'
 import videoPlayerComponent from './components/videoPlayer.vue'
 import Hls from 'hls.js'
 
+// 确保 HLS.js 被打包
+if (typeof window !== 'undefined') {
+  window.Hls = Hls
+}
+
 function witPlayer(options) {
   const { container, src, ...props } = options
   

@@ -416,15 +416,19 @@ const containerClasses = computed(() => ({
 
 // 计算属性：是否显示中间的大播放按钮
 const showBigPlay = computed(() => {
-  return (!isPlaying.value || isEnded.value) && !hasError.value && !isLoading.value
+  return (!isPlaying.value || isEnded.value) && 
+         !hasError.value && 
+         !isLoading.value
 })
 
 // 计算属性：控制条样式
-const controlsStyle = computed(() => ({
-  opacity: controlsVisible.value ? 1 : 0,
-  visibility: controlsVisible.value ? 'visible' : 'hidden',
-  transform: controlsVisible.value ? 'translateY(0)' : 'translateY(100%)'
-}))
+const controlsStyle = computed(() => {
+  return {
+    opacity: controlsVisible.value ? 1 : 0,
+    pointerEvents: controlsVisible.value ? 'auto' : 'none',
+    transform: controlsVisible.value ? 'translateY(0) translateZ(0)' : 'translateY(100%) translateZ(0)'
+  }
+})
 
 // 格式化时间（秒转为 mm:ss 或 hh:mm:ss）
 const formatTime = (seconds) => {
@@ -550,30 +554,30 @@ const processDanmakuQueue = () => {
 const initHls = async () => {
   if (!videoRef.value) return
   
+  isLoading.value = true
+  hasError.value = false
+  hasStarted.value = false
+  isEnded.value = false
+  isPlaying.value = false
+  
+  if (hlsInstance.value) {
+    hlsInstance.value.destroy()
+    hlsInstance.value = null
+  }
+  
   const isHlsSource = props.isM3u8
   
   if (isHlsSource) {
     isHls.value = true
     
-    // 确保 HLS 实例被销毁
-    if (hlsInstance.value) {
-      hlsInstance.value.destroy()
-      hlsInstance.value = null
-    }
-    
-    // 完全重置视频元素
-    videoRef.value.pause()
-    videoRef.value.removeAttribute('src')
-    videoRef.value.load()
-    
-    // 等待 DOM 更新
     await nextTick()
     
-    // 检查是否原生支持 HLS（Safari）
     if (videoRef.value.canPlayType('application/vnd.apple.mpegurl')) {
       videoRef.value.src = props.src
+      videoRef.value.addEventListener('loadedmetadata', () => {
+        isLoading.value = false
+      })
     } else if (Hls.isSupported()) {
-      // 使用 HLS.js 播放
       hlsInstance.value = new Hls({
         enableWorker: true,
         lowLatencyMode: props.isLive,
@@ -583,7 +587,6 @@ const initHls = async () => {
       hlsInstance.value.loadSource(props.src)
       hlsInstance.value.attachMedia(videoRef.value)
       
-      // HLS 清单解析完成
       hlsInstance.value.on(Hls.Events.MANIFEST_PARSED, () => {
         isLoading.value = false
         if (props.autoplay) {
@@ -604,21 +607,56 @@ const initHls = async () => {
               break
             default:
               hasError.value = true
+              isLoading.value = false
               break
           }
         }
       })
     } else {
       hasError.value = true
+      isLoading.value = false
       errorMessage.value = '您的浏览器不支持HLS播放'
     }
   } else {
     isHls.value = false
-    if (hlsInstance.value) {
-      hlsInstance.value.destroy()
-      hlsInstance.value = null
-    }
+    
+    videoRef.value.pause()
+    videoRef.value.removeAttribute('src')
+    videoRef.value.load()
+    
     videoRef.value.src = props.src
+    
+    const onCanPlayHandler = () => {
+      isLoading.value = false
+      hasError.value = false
+      videoRef.value.removeEventListener('canplay', onCanPlayHandler)
+      videoRef.value.removeEventListener('error', onErrorHandler)
+    }
+    
+    const onErrorHandler = () => {
+      isLoading.value = false
+      hasError.value = true
+      errorMessage.value = '视频加载失败，请检查视频地址是否正确'
+      videoRef.value.removeEventListener('canplay', onCanPlayHandler)
+      videoRef.value.removeEventListener('error', onErrorHandler)
+    }
+    
+    videoRef.value.addEventListener('canplay', onCanPlayHandler)
+    videoRef.value.addEventListener('error', onErrorHandler)
+    
+    setTimeout(() => {
+      if (isLoading.value) {
+        isLoading.value = false
+        hasError.value = true
+        errorMessage.value = '视频加载超时'
+      }
+    }, 10000)
+    
+    if (props.autoplay) {
+      videoRef.value.play().catch(() => {
+        isLoading.value = false
+      })
+    }
   }
 }
 
@@ -974,6 +1012,7 @@ const onProgress = () => {
 const onLoadedMetadata = () => {
   if (!videoRef.value) return
   duration.value = videoRef.value.duration
+  isLoading.value = false
 }
 
 const onWaiting = () => {
@@ -982,10 +1021,13 @@ const onWaiting = () => {
 
 const onPlaying = () => {
   isLoading.value = false
+  hasError.value = false
+  isPlaying.value = true
 }
 
 const onCanPlay = () => {
   isLoading.value = false
+  hasError.value = false
   emit('canplay')
 }
 
@@ -997,6 +1039,7 @@ const onLoadStart = () => {
 const onError = () => {
   hasError.value = true
   isLoading.value = false
+  errorMessage.value = '视频加载失败，请检查视频地址是否正确'
   emit('error')
 }
 
@@ -1066,12 +1109,17 @@ onBeforeUnmount(() => {
   clearTimeout(hideControlsTimeout.value)
 })
 
-watch(() => props.src, () => {
+watch(() => props.src, async () => {
   hasStarted.value = false
   isEnded.value = false
   hasError.value = false
   isLoading.value = true
+  isPlaying.value = false
+  currentTime.value = 0
   duration.value = 0
+  bufferedPercent.value = 0
+  
+  await nextTick()
   
   initHls()
 })
@@ -1235,8 +1283,8 @@ defineExpose({
   outline-offset: 2px;
 }
 
-.wit-container.wit-paused .wit-big-play,
-.wit-container.wit-ended .wit-big-play {
+.wit-container.wit-paused:not(.wit-waiting) .wit-big-play,
+.wit-container.wit-ended:not(.wit-waiting) .wit-big-play {
   display: flex;
 }
 
@@ -1310,9 +1358,9 @@ defineExpose({
   padding: 0 12px 12px;
   z-index: 20;
   opacity: 0;
-  visibility: hidden;
-  transform: translateY(100%);
-  transition: opacity 0.5s ease, visibility 0.5s ease, transform 0.5s ease;
+  pointer-events: none;
+  transform: translateY(100%) translateZ(0);
+  transition: opacity 0.3s ease, transform 0.3s ease;
 }
 
 .wit-progress-wrap {
@@ -1448,6 +1496,8 @@ defineExpose({
   -webkit-backdrop-filter: blur(12px) saturate(180%);
   box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.05), 0 1px 3px 0 rgba(0, 0, 0, 0.15), 0 1px 2px -1px rgba(0, 0, 0, 0.15), inset 0 0 0 1px rgba(255, 255, 255, 0.08);
   flex-wrap: wrap;
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
 }
 
 .wit-left-controls,
@@ -1758,19 +1808,19 @@ defineExpose({
 
 .wit-error {
   position: absolute;
-  top: 50%;
+  top: 45%;
   left: 50%;
   transform: translate(-50%, -50%);
-  background: var(--wit-surface);
+  background: rgba(30, 30, 40, 0.95);
   padding: 28px 36px;
   border-radius: 12px;
   text-align: center;
-  z-index: 30;
+  z-index: 15;
   display: none;
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
-  box-shadow: var(--wit-shadow);
-  border: 1px solid var(--wit-border);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.15);
 }
 
 .wit-container.wit-error .wit-error {
@@ -1791,7 +1841,7 @@ defineExpose({
 }
 
 .wit-retry-btn {
-  background: var(--wit-accent);
+  background: #007aff;
   color: #fff;
   border: none;
   padding: 10px 24px;
@@ -1803,7 +1853,7 @@ defineExpose({
 }
 
 .wit-retry-btn:hover {
-  background: #1976d2;
+  background: #0056b3;
 }
 
 .wit-toast {
@@ -2046,5 +2096,17 @@ defineExpose({
     outline-color: rgba(255, 255, 255, 0.25);
     outline-offset: 0;
   }
+}
+
+.wit-container.wit-waiting .wit-big-play {
+  display: none !important;
+}
+
+.wit-container.wit-ended .wit-big-play {
+  display: flex;
+}
+
+.wit-container.wit-waiting .wit-poster {
+  display: none;
 }
 </style>
