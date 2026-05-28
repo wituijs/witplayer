@@ -7,7 +7,13 @@ let player = null;
 const sources = {
   mp4: {
     src: 'https://www.w3schools.com/html/mov_bbb.mp4',
-    poster: 'https://www.w3schools.com/html/mov_bbb.mp4#t=0.1'
+    poster: 'https://www.w3schools.com/html/mov_bbb.mp4#t=0.1',
+    danmaku: true,
+    danmakuList: [
+      { id: 1, time: 1, text: 'MP4弹幕测试', color: '#fff' },
+      { id: 2, time: 2, text: '支持MP4弹幕', color: '#ff5f56' },
+      { id: 3, time: 3, text: 'witplayer', color: '#27c93f' },
+    ]
   },
   hls: {
     src: 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8',

@@ -71,7 +71,7 @@
       </svg>
     </button>
 
-    <div v-if="controls" class="wit-controls" :style="controlsStyle">
+    <div v-if="controls" class="wit-controls" :style="controlsStyle" @touchstart.stop="handleControlsTouchStart" @touchend.stop="handleControlsTouchEnd" @mouseenter.stop="handleControlsMouseEnter" @mouseleave.stop="handleControlsMouseLeave">
       <div class="wit-controls-bar">
         <div class="wit-left-controls">
           <button class="wit-btn wit-play-btn" aria-label="播放" @click="togglePlay">
@@ -348,6 +348,7 @@ const isHls = ref(false)
 const hlsInstance = ref(null)
 const supportsPiP = ref(false)
 const isDragging = ref(false)
+const isMouseOverControls = ref(false)
 
 const currentTime = ref(0)
 const duration = ref(0)
@@ -406,7 +407,7 @@ const containerClasses = computed(() => ({
 }))
 
 const showBigPlay = computed(() => {
-  return (!isPlaying.value || isEnded.value) && !hasError.value
+  return (!isPlaying.value || isEnded.value) && !hasError.value && !isLoading.value
 })
 
 const controlsStyle = computed(() => ({
@@ -789,6 +790,7 @@ const showControls = () => {
 
 const handleMouseMove = () => {
   if ('ontouchstart' in window) return
+  if (isMouseOverControls.value) return
   showControls()
 }
 
@@ -812,6 +814,28 @@ const handleTouchEnd = () => {
       showControls()
     }
   }
+}
+
+const handleControlsTouchStart = () => {
+  clearTimeout(hideControlsTimeout.value)
+  controlsVisible.value = true
+}
+
+const handleControlsTouchEnd = () => {
+  showControls()
+}
+
+const handleControlsMouseEnter = () => {
+  if ('ontouchstart' in window) return
+  isMouseOverControls.value = true
+  clearTimeout(hideControlsTimeout.value)
+  controlsVisible.value = true
+}
+
+const handleControlsMouseLeave = () => {
+  if ('ontouchstart' in window) return
+  isMouseOverControls.value = false
+  showControls()
 }
 
 const handleKeyDown = (e) => {
@@ -1311,7 +1335,7 @@ defineExpose({
   border-radius: 9999px;
   transform: translate(-50%, -50%);
   opacity: 0;
-  transition: opacity 0.15s ease-out, width 0.15s ease-out, height 0.15s ease-out;
+  transition: opacity 0.15s ease-out, width 0.15s ease-out, height 0.15s ease-out, outline-offset 0.15s ease-out;
   box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.1), 0 1px 3px rgba(0, 0, 0, 0.15);
   outline: 4px solid transparent;
   outline-offset: -4px;
@@ -1320,6 +1344,11 @@ defineExpose({
 .wit-progress:hover .wit-progress-thumb,
 .wit-progress-thumb:focus {
   opacity: 1;
+}
+
+.wit-progress:hover .wit-progress-thumb {
+  outline-color: rgba(255, 255, 255, 0.25);
+  outline-offset: 0;
 }
 
 .wit-progress:active .wit-progress-thumb {
@@ -1353,6 +1382,8 @@ defineExpose({
   bottom: calc(100% + 8px);
   transform: translateX(-50%);
   background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(12px) saturate(180%);
+  -webkit-backdrop-filter: blur(12px) saturate(180%);
   color: var(--wit-primary);
   padding: 4px 8px;
   border-radius: 4px;
@@ -1375,8 +1406,7 @@ defineExpose({
   padding: 5px 8px;
   backdrop-filter: blur(12px) saturate(180%);
   -webkit-backdrop-filter: blur(12px) saturate(180%);
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.05), 0 1px 3px 0 rgba(0, 0, 0, 0.15), 0 1px 2px -1px rgba(0, 0, 0, 0.15), inset 0 0 0 1px rgba(255, 255, 255, 0.08);
   flex-wrap: wrap;
 }
 
@@ -1482,15 +1512,14 @@ defineExpose({
 
 .wit-volume-slider {
   position: absolute;
-  bottom: calc(100% + 8px);
+  bottom: calc(100% + 12px);
   left: 50%;
   transform: translateX(-50%);
   background: rgba(0, 0, 0, 0.4);
   backdrop-filter: blur(12px) saturate(180%);
   -webkit-backdrop-filter: blur(12px) saturate(180%);
-  border-radius: 9999px;
-  padding: 10px 4px;
-  margin-bottom: 8px;
+  border-radius: 1.25rem;
+  padding: 12px 0;
   opacity: 0;
   visibility: hidden;
   filter: blur(8px);
@@ -1499,9 +1528,8 @@ defineExpose({
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  gap: 8px;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.05), 0 1px 3px 0 rgba(0, 0, 0, 0.15), 0 1px 2px -1px rgba(0, 0, 0, 0.15), inset 0 0 0 1px rgba(255, 255, 255, 0.08);
   transform-origin: bottom center;
   pointer-events: none;
 }
@@ -1538,21 +1566,48 @@ defineExpose({
 
 .wit-volume-range::-webkit-slider-thumb {
   -webkit-appearance: none;
-  width: 14px;
-  height: 14px;
+  width: 10px;
+  height: 10px;
   background: var(--wit-primary);
-  border-radius: 50%;
+  border-radius: 9999px;
   cursor: pointer;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.1), 0 1px 3px rgba(0, 0, 0, 0.15);
+  outline: 4px solid transparent;
+  outline-offset: -4px;
+  transition: outline-offset 0.15s ease-out, width 0.15s ease-out, height 0.15s ease-out;
+}
+
+.wit-volume-range::-webkit-slider-thumb:hover {
+  outline-color: rgba(255, 255, 255, 0.25);
+  outline-offset: 0;
+}
+
+.wit-volume-range::-webkit-slider-thumb:active {
+  width: 12px;
+  height: 12px;
 }
 
 .wit-volume-range::-moz-range-thumb {
-  width: 14px;
-  height: 14px;
+  width: 10px;
+  height: 10px;
   background: var(--wit-primary);
-  border-radius: 50%;
+  border-radius: 9999px;
   cursor: pointer;
   border: none;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.1), 0 1px 3px rgba(0, 0, 0, 0.15);
+  outline: 4px solid transparent;
+  outline-offset: -4px;
+  transition: outline-offset 0.15s ease-out, width 0.15s ease-out, height 0.15s ease-out;
+}
+
+.wit-volume-range::-moz-range-thumb:hover {
+  outline-color: rgba(255, 255, 255, 0.25);
+  outline-offset: 0;
+}
+
+.wit-volume-range::-moz-range-thumb:active {
+  width: 12px;
+  height: 12px;
 }
 
 .wit-time {
@@ -1587,34 +1642,28 @@ defineExpose({
 
 .wit-speed-menu {
   position: absolute;
-  bottom: calc(100% + 8px);
+  bottom: calc(100% + 12px);
   left: 50%;
   transform: translateX(-50%);
   background: rgba(0, 0, 0, 0.4);
   backdrop-filter: blur(12px) saturate(180%);
   -webkit-backdrop-filter: blur(12px) saturate(180%);
   border-radius: 1.25rem;
-  padding: 6px 0;
+  padding: 6px;
   min-width: 90px;
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.05), 0 1px 3px 0 rgba(0, 0, 0, 0.15), 0 1px 2px -1px rgba(0, 0, 0, 0.15), inset 0 0 0 1px rgba(255, 255, 255, 0.08);
   opacity: 0;
+  visibility: hidden;
   filter: blur(8px);
   scale: 0.85;
-  transition: opacity 0.15s ease-out, filter 0.15s ease-out, scale 0.15s ease-out;
+  transition: opacity 0.15s ease-out, visibility 0.15s ease-out, filter 0.15s ease-out, scale 0.15s ease-out;
   transform-origin: bottom;
-  pointer-events: none;
-}
-
-.wit-speed-wrap:hover .wit-speed-menu:not(.wit-speed-menu--visible) {
-  opacity: 0;
-  filter: blur(8px);
-  scale: 0.85;
   pointer-events: none;
 }
 
 .wit-speed-menu--visible {
   opacity: 1 !important;
+  visibility: visible !important;
   filter: blur(0) !important;
   scale: 1 !important;
   pointer-events: auto !important;
@@ -1622,7 +1671,7 @@ defineExpose({
 
 .wit-speed-item {
   display: block;
-  width: calc(100% - 0.75rem);
+  width: 100%;
   padding: 0.5rem 1rem;
   text-align: center;
   background: none;
@@ -1635,14 +1684,11 @@ defineExpose({
   outline: 0.125rem solid transparent;
   outline-offset: -0.125rem;
   border-radius: 9999px;
-  margin: 0.125rem 0.375rem;
-  margin-left: auto;
-  margin-right: auto;
 }
 
 .wit-speed-item:hover,
 .wit-speed-item:focus-visible {
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.1);
 }
 
 .wit-speed-item:focus-visible {
@@ -1652,7 +1698,7 @@ defineExpose({
 
 .wit-speed-item.wit-active {
   color: var(--wit-primary);
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.15);
 }
 
 .wit-container.wit-fullscreen {
@@ -1725,20 +1771,19 @@ defineExpose({
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  background: var(--wit-surface);
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(12px) saturate(180%);
+  -webkit-backdrop-filter: blur(12px) saturate(180%);
   color: var(--wit-primary);
   padding: 10px 18px;
-  border-radius: 6px;
+  border-radius: 1.25rem;
   font-size: 14px;
   font-weight: 500;
   z-index: 25;
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.15s;
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
-  border: 1px solid var(--wit-border);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.05), 0 1px 3px 0 rgba(0, 0, 0, 0.15), 0 1px 2px -1px rgba(0, 0, 0, 0.15), inset 0 0 0 1px rgba(255, 255, 255, 0.08);
 }
 
 .wit-toast.wit-show {
@@ -1748,14 +1793,13 @@ defineExpose({
 .wit-context-menu {
   position: fixed;
   z-index: 9999;
-  background: rgba(20, 20, 30, 0.95);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(12px) saturate(180%);
+  -webkit-backdrop-filter: blur(12px) saturate(180%);
+  border-radius: 1.25rem;
   padding: 6px 0;
   min-width: 150px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.05), 0 1px 3px 0 rgba(0, 0, 0, 0.15), 0 1px 2px -1px rgba(0, 0, 0, 0.15), inset 0 0 0 1px rgba(255, 255, 255, 0.08);
 }
 
 .wit-context-menu-item {
@@ -1953,6 +1997,14 @@ defineExpose({
     opacity: 1;
     width: 16px;
     height: 16px;
+    outline-color: transparent;
+    outline-offset: -4px;
+    transition: opacity 0.15s ease-out, width 0.15s ease-out, height 0.15s ease-out, outline-color 0.15s ease-out, outline-offset 0.15s ease-out;
+  }
+  
+  .wit-progress:active .wit-progress-thumb {
+    outline-color: rgba(255, 255, 255, 0.25);
+    outline-offset: 0;
   }
 }
 </style>

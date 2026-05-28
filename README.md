@@ -2,6 +2,8 @@
 
 轻量级视频播放器，支持 MP4、HLS/M3U8、直播流，完美适配移动端。
 
+[English Documentation](./README_EN.md) | [在线演示](https://www.wit-ui.com/witplayer/)
+
 ## 特性
 
 - 🎬 多格式支持：MP4、HLS/M3U8、FLV
@@ -42,7 +44,7 @@ const player = new witplayer({
 <body>
   <div id="player" style="width: 800px; height: 450px;"></div>
   
-  <script src="https://unpkg.com/witplayer/dist/witplayer.umd.cjs"></script>
+  <script src="https://unpkg.com/witplayer/dist/witplayer.js"></script>
   <script>
     const player = new witplayer({
       container: '#player',
