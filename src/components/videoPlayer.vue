@@ -271,6 +271,7 @@
 import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import Hls from 'hls.js'
 
+// 组件属性定义
 const props = defineProps({
   src: {
     type: String,
@@ -330,38 +331,44 @@ const props = defineProps({
   }
 })
 
+// 组件事件定义
 const emit = defineEmits(['play', 'pause', 'ended', 'timeupdate', 'error', 'fullscreenchange', 'loadstart', 'canplay'])
 
-const containerRef = ref(null)
-const videoRef = ref(null)
+// DOM 引用
+const containerRef = ref(null)  // 播放器容器引用
+const videoRef = ref(null)      // 视频元素引用
 
-const isPlaying = ref(false)
-const isMuted = ref(props.muted)
-const isFullscreen = ref(false)
-const isPiP = ref(false)
-const isEnded = ref(false)
-const isLoading = ref(true)
-const hasError = ref(false)
-const hasStarted = ref(false)
-const isHls = ref(false)
-const hlsInstance = ref(null)
-const supportsPiP = ref(false)
-const isDragging = ref(false)
-const isMouseOverControls = ref(false)
+// 播放器状态
+const isPlaying = ref(false)        // 是否正在播放
+const isMuted = ref(props.muted)    // 是否静音
+const isFullscreen = ref(false)     // 是否全屏
+const isPiP = ref(false)            // 是否画中画
+const isEnded = ref(false)          // 是否播放结束
+const isLoading = ref(true)         // 是否正在加载
+const hasError = ref(false)         // 是否有错误
+const hasStarted = ref(false)       // 是否已开始播放
+const isHls = ref(false)            // 是否为 HLS 视频
+const hlsInstance = ref(null)       // HLS 实例
+const supportsPiP = ref(false)      // 是否支持画中画
+const isDragging = ref(false)       // 是否正在拖动进度条
+const isMouseOverControls = ref(false)  // 鼠标是否在控制条上
 
-const currentTime = ref(0)
-const duration = ref(0)
-const bufferedPercent = ref(0)
-const currentVolume = ref(props.volume)
-const playbackRate = ref(1)
-const errorMessage = ref('视频加载失败')
+// 视频信息
+const currentTime = ref(0)          // 当前播放时间
+const duration = ref(0)             // 视频总时长
+const bufferedPercent = ref(0)      // 缓冲百分比
+const currentVolume = ref(props.volume)  // 当前音量
+const playbackRate = ref(1)         // 播放速度
+const errorMessage = ref('视频加载失败')  // 错误信息
 
-const controlsVisible = ref(false)
-const hideControlsTimeout = ref(null)
-const touchStartTime = ref(0)
+// 控制条状态
+const controlsVisible = ref(false)      // 控制条是否可见
+const hideControlsTimeout = ref(null)   // 隐藏控制条的定时器
+const touchStartTime = ref(0)           // 触摸开始时间
 
-const toastVisible = ref(false)
-const toastMessage = ref('')
+// Toast 提示
+const toastVisible = ref(false)     // Toast 是否可见
+const toastMessage = ref('')        // Toast 消息
 
 const contextMenuVisible = ref(false)
 const contextMenuStyle = ref({})
@@ -387,6 +394,7 @@ const progressPercent = computed(() => {
   return (currentTime.value / duration.value) * 100
 })
 
+// 计算属性：视频类型
 const videoType = computed(() => {
   if (props.codec) return props.codec
   if (props.src.includes('.mp4')) return 'video/mp4; codecs="hvc1"'
@@ -395,6 +403,7 @@ const videoType = computed(() => {
   return 'video/mp4'
 })
 
+// 计算属性：容器类名
 const containerClasses = computed(() => ({
   'wit-paused': !isPlaying.value,
   'wit-ended': isEnded.value,
@@ -405,16 +414,19 @@ const containerClasses = computed(() => ({
   'wit-touch': 'ontouchstart' in window
 }))
 
+// 计算属性：是否显示中间的大播放按钮
 const showBigPlay = computed(() => {
-  return (!isPlaying.value || isEnded.value) && !hasError.value && !isLoading.value && duration.value > 0
+  return (!isPlaying.value || isEnded.value) && !hasError.value && !isLoading.value
 })
 
+// 计算属性：控制条样式
 const controlsStyle = computed(() => ({
   opacity: controlsVisible.value ? 1 : 0,
   visibility: controlsVisible.value ? 'visible' : 'hidden',
   transform: controlsVisible.value ? 'translateY(0)' : 'translateY(100%)'
 }))
 
+// 格式化时间（秒转为 mm:ss 或 hh:mm:ss）
 const formatTime = (seconds) => {
   if (isNaN(seconds) || !isFinite(seconds)) return '00:00'
   const h = Math.floor(seconds / 3600)
@@ -426,6 +438,7 @@ const formatTime = (seconds) => {
   return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`
 }
 
+// 显示 Toast 提示
 const showToast = (message) => {
   toastMessage.value = message
   toastVisible.value = true
@@ -533,6 +546,7 @@ const processDanmakuQueue = () => {
   })
 }
 
+// 初始化 HLS 播放器
 const initHls = async () => {
   if (!videoRef.value) return
   
@@ -555,9 +569,11 @@ const initHls = async () => {
     // 等待 DOM 更新
     await nextTick()
     
+    // 检查是否原生支持 HLS（Safari）
     if (videoRef.value.canPlayType('application/vnd.apple.mpegurl')) {
       videoRef.value.src = props.src
     } else if (Hls.isSupported()) {
+      // 使用 HLS.js 播放
       hlsInstance.value = new Hls({
         enableWorker: true,
         lowLatencyMode: props.isLive,
@@ -567,7 +583,9 @@ const initHls = async () => {
       hlsInstance.value.loadSource(props.src)
       hlsInstance.value.attachMedia(videoRef.value)
       
+      // HLS 清单解析完成
       hlsInstance.value.on(Hls.Events.MANIFEST_PARSED, () => {
+        isLoading.value = false
         if (props.autoplay) {
           videoRef.value.play().catch(() => {})
         }
@@ -604,6 +622,7 @@ const initHls = async () => {
   }
 }
 
+// 切换播放/暂停
 const togglePlay = () => {
   if (!videoRef.value) return
   
@@ -623,6 +642,7 @@ const togglePlay = () => {
   }
 }
 
+// 计算进度条点击位置对应的时间
 const seek = (e) => {
   if (!videoRef.value || props.isLive) return
   const target = e.currentTarget || e.target
@@ -633,6 +653,7 @@ const seek = (e) => {
   return percent * duration.value
 }
 
+// 进度条点击事件
 const onProgressClick = (e) => {
   if (props.isLive) return
   const time = seek(e)
@@ -641,6 +662,7 @@ const onProgressClick = (e) => {
   }
 }
 
+// 开始拖动进度条
 const startDrag = (e) => {
   if (props.isLive) return
   e.preventDefault()
@@ -783,6 +805,7 @@ const toggleFullscreen = async () => {
   }
 }
 
+// 重试加载视频
 const retry = () => {
   hasError.value = false
   if (hlsInstance.value) {
@@ -792,6 +815,7 @@ const retry = () => {
   }
 }
 
+// 显示控制条（3秒后自动隐藏）
 const showControls = () => {
   controlsVisible.value = true
   clearTimeout(hideControlsTimeout.value)
@@ -801,22 +825,26 @@ const showControls = () => {
   }, 3000)
 }
 
+// 鼠标移动事件处理（PC端）
 const handleMouseMove = () => {
   if ('ontouchstart' in window) return
   if (isMouseOverControls.value) return
   showControls()
 }
 
+// 鼠标离开事件处理（PC端）
 const handleMouseLeave = () => {
   if ('ontouchstart' in window) return
   clearTimeout(hideControlsTimeout.value)
   controlsVisible.value = false
 }
 
+// 触摸开始事件处理（移动端）
 const handleTouchStart = () => {
   touchStartTime.value = Date.now()
 }
 
+// 触摸结束事件处理（移动端）
 const handleTouchEnd = () => {
   const touchDuration = Date.now() - touchStartTime.value
   if (touchDuration < 200) {

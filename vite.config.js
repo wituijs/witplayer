@@ -122,6 +122,9 @@ export default defineConfig(({ command }) => {
   if (command === 'serve') {
     return {
       plugins: [vue()],
+      server: {
+        host: true
+      },
       define: {
         'process.env.NODE_ENV': JSON.stringify('development')
       }
