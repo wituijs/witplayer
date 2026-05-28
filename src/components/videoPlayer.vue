@@ -22,7 +22,7 @@
       x5-video-player-fullscreen="true"
       @click="togglePlay"
     >
-      <source v-if="!isHls" :src="src" :type="videoType">
+      <source v-if="!isHls && src" :src="src" :type="videoType">
     </video>
 
     <div 
@@ -334,7 +334,6 @@ const emit = defineEmits(['play', 'pause', 'ended', 'timeupdate', 'error', 'full
 
 const containerRef = ref(null)
 const videoRef = ref(null)
-const progressRef = ref(null)
 
 const isPlaying = ref(false)
 const isMuted = ref(props.muted)
@@ -407,7 +406,7 @@ const containerClasses = computed(() => ({
 }))
 
 const showBigPlay = computed(() => {
-  return (!isPlaying.value || isEnded.value) && !hasError.value && !isLoading.value
+  return (!isPlaying.value || isEnded.value) && !hasError.value && !isLoading.value && duration.value > 0
 })
 
 const controlsStyle = computed(() => ({
@@ -534,7 +533,7 @@ const processDanmakuQueue = () => {
   })
 }
 
-const initHls = () => {
+const initHls = async () => {
   if (!videoRef.value) return
   
   const isHlsSource = props.isM3u8
@@ -542,13 +541,23 @@ const initHls = () => {
   if (isHlsSource) {
     isHls.value = true
     
+    // 确保 HLS 实例被销毁
+    if (hlsInstance.value) {
+      hlsInstance.value.destroy()
+      hlsInstance.value = null
+    }
+    
+    // 完全重置视频元素
+    videoRef.value.pause()
+    videoRef.value.removeAttribute('src')
+    videoRef.value.load()
+    
+    // 等待 DOM 更新
+    await nextTick()
+    
     if (videoRef.value.canPlayType('application/vnd.apple.mpegurl')) {
       videoRef.value.src = props.src
     } else if (Hls.isSupported()) {
-      if (hlsInstance.value) {
-        hlsInstance.value.destroy()
-      }
-      
       hlsInstance.value = new Hls({
         enableWorker: true,
         lowLatencyMode: props.isLive,
@@ -587,6 +596,10 @@ const initHls = () => {
     }
   } else {
     isHls.value = false
+    if (hlsInstance.value) {
+      hlsInstance.value.destroy()
+      hlsInstance.value = null
+    }
     videoRef.value.src = props.src
   }
 }
@@ -1026,13 +1039,12 @@ onBeforeUnmount(() => {
 })
 
 watch(() => props.src, () => {
-  if (hlsInstance.value) {
-    hlsInstance.value.destroy()
-    hlsInstance.value = null
-  }
   hasStarted.value = false
   isEnded.value = false
   hasError.value = false
+  isLoading.value = true
+  duration.value = 0
+  
   initHls()
 })
 
